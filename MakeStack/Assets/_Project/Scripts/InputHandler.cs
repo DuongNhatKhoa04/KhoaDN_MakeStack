@@ -1,28 +1,35 @@
-﻿using System;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace MakeStack.Input
 {
     public class InputHandler : MonoBehaviour
     {
-        [Header("Movement Settings")]
-        [SerializeField] private float _minSwipeDistance = 50f;
-        [SerializeField] private float _maxSlideDistance = 100f;
-        [SerializeField] private LayerMask _wallLayerMask;
-        [SerializeField] private Transform _baseTransform;
-        [SerializeField] private Collider _baseCollider;
-        [SerializeField] private Rigidbody _baseRigidbody;
-        [SerializeField] private float _slideSpeed = 5f;
+        #region --- Fields ---
+
+        [SerializeField] private float minSwipeDistance = 50f;
+        [SerializeField] private float maxSlideDistance = 100f;
+        [SerializeField] private float slideSpeed;
+        [SerializeField] private LayerMask wallLayerMask;
+        [SerializeField] private Transform baseTransform;
+        [SerializeField] private Collider baseCollider;
+        [SerializeField] private Rigidbody baseRigidbody;
 
         private PlayerInput _playerInput;
+        
+        private Vector3 _targetPos;
+        private Vector3 _moveDir;
+        
         private Vector2 _startPos;
         private Vector2 _endPos;
+        
         private bool _isSwipe;
-        private Vector3 _targetPos;
         private bool _isSliding;
-        private Vector3 _moveDir;
 
+        #endregion
+
+        #region --- Methods ---
+        
         private void Awake()
         {
             _playerInput = new PlayerInput();
@@ -37,42 +44,30 @@ namespace MakeStack.Input
 
         private void OnDisable()
         {
-            if (_playerInput != null)
-            {
-                _playerInput.Swipe.PointerPress.started -= OnSwipeStarted;
-                _playerInput.Swipe.PointerPress.canceled -= OnSwipeEnd;
-                _playerInput.Swipe.Disable();
-            }
+            if (_playerInput == null) return;
+            
+            _playerInput.Swipe.PointerPress.started -= OnSwipeStarted;
+            _playerInput.Swipe.PointerPress.canceled -= OnSwipeEnd;
+            _playerInput.Swipe.Disable();
         }
 
         private void Update()
         {
             Sliding();
         }
-
-        private void Sliding()
-        {
-            if (_isSliding)
-            {
-                Vector3 newPos = Vector3.MoveTowards(_baseRigidbody.position, _targetPos, _slideSpeed * Time.deltaTime);
-                _baseRigidbody.MovePosition(newPos);
-
-                if (Vector3.Distance(_baseRigidbody.position, _targetPos) < 0.1f)
-                {
-                    _baseRigidbody.MovePosition(_targetPos);
-                    _isSliding = false;
-                }
-            }
-        }
-
+        
         private void OnSwipeStarted(InputAction.CallbackContext context)
         {
+            if (_isSliding) return;
+
             _startPos = _playerInput.Swipe.PointerDirector.ReadValue<Vector2>();
             _isSwipe = true;
         }
 
         private void OnSwipeEnd(InputAction.CallbackContext context)
         {
+            if (_isSliding) return;
+
             if (!_isSwipe) return;
 
             _endPos = _playerInput.Swipe.PointerDirector.ReadValue<Vector2>();
@@ -80,10 +75,23 @@ namespace MakeStack.Input
             _isSwipe = false;
         }
 
+        private void Sliding()
+        {
+            if (!_isSliding) return;
+            
+            var newPos = Vector3.MoveTowards(baseRigidbody.position, _targetPos, slideSpeed * Time.deltaTime);
+            baseRigidbody.MovePosition(newPos);
+
+            if (Vector3.Distance(baseRigidbody.position, _targetPos) >= 0.1f) return;
+            
+            baseRigidbody.MovePosition(_targetPos);
+            _isSliding = false;
+        }
+
         private void DetectDirection()
         {
-            Vector2 swipeVector = _endPos - _startPos;
-            if (swipeVector.magnitude < _minSwipeDistance) return;
+            var swipeVector = _endPos - _startPos;
+            if (swipeVector.magnitude < minSwipeDistance) return;
 
             swipeVector.Normalize();
             _moveDir = Vector3.zero;
@@ -103,24 +111,23 @@ namespace MakeStack.Input
 
         private void CalculateTargetPosition(Vector3 dir)
         {
-            Debug.Log("Hi");
-            RaycastHit hit;
-            Vector3 origin = _baseTransform.position;
+            var origin = baseTransform.position;
 
-            if (Physics.Raycast(origin, dir, out hit, _maxSlideDistance, _wallLayerMask))
+            if (Physics.Raycast(origin, dir, out RaycastHit hit, maxSlideDistance, wallLayerMask))
             {
-                Debug.Log("Can");
-                float distance = hit.distance - 0.5f;
+                //Debug.Log("Can");
+                var distance = hit.distance - 0.5f;
                 _targetPos = transform.position + dir * distance;
             }
             else
             {
-                Debug.Log("Cant");
-                _targetPos = transform.position + dir * _maxSlideDistance;
+                //Debug.Log("Cant");
+                _targetPos = transform.position + dir * maxSlideDistance;
             }
 
             _isSliding = true;
         }
-
+        
+        #endregion
     }
 }
