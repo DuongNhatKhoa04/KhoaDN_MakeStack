@@ -1,7 +1,7 @@
 using MakeStack.Mechanic;
 using UnityEngine;
 
-namespace MakeStack.Camera
+namespace MakeStack.Manager
 {
     public class CameraManager : MonoBehaviour
     {
@@ -11,12 +11,9 @@ namespace MakeStack.Camera
         [Header("Offsets")]
         [SerializeField] private float baseHeight;
         [SerializeField] private float heightPerBrick;
-        [SerializeField] private float depthOffset;
-
-        [Header("Rotation")]
-        [SerializeField] private float minAngleX;
-        [SerializeField] private float maxAngleX;
-        [SerializeField] private int maxBrickForMaxAngle;
+        [SerializeField] private float baseDepthOffset;
+        [SerializeField] private float extraDepthPerBrick;
+        [SerializeField] private float maxExtraDepth;
 
         [SerializeField] private float smoothSpeed;
 
@@ -28,21 +25,21 @@ namespace MakeStack.Camera
             var currentPos = transform.position;
             
             float targetHeight = baseHeight + collectBrick.StackCount * heightPerBrick;
-            float targetDepth = playerPos.z + depthOffset;
+            
+            float extraDepth = Mathf.Clamp(
+                collectBrick.StackCount * extraDepthPerBrick,
+                maxExtraDepth,
+                0f
+            );
+            float targetDepth = playerPos.z + baseDepthOffset + extraDepth;
             
             Vector3 targetPos = new Vector3(
-                currentPos.x,        
+                currentPos.x,
                 playerPos.y + targetHeight,
                 targetDepth
             );
             
             transform.position = Vector3.Lerp(currentPos, targetPos, Time.deltaTime * smoothSpeed);
-            
-            float t = Mathf.Clamp01((float)collectBrick.StackCount / maxBrickForMaxAngle);
-            float targetAngleX = Mathf.Lerp(minAngleX, maxAngleX, t);
-
-            Quaternion targetRot = Quaternion.Euler(targetAngleX, 0, 0);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * smoothSpeed);
         }
     }
 }

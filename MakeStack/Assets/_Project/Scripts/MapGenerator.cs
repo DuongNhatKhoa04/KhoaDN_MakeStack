@@ -5,14 +5,14 @@ using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
-using Unity.VisualScripting;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace MakeStack.Map
 {
     public struct NativeStack<T> where T : unmanaged
     {
+        private NativeList<T> _list;
+        
         public NativeStack(Allocator allocator)
         {
             _list = new NativeList<T>(allocator);
@@ -22,43 +22,46 @@ namespace MakeStack.Map
 
         public T Pop()
         {
-            var item = _list[_list.Length - 1];
+            var item = _list[^1]; // _list.Length - 1
             _list.RemoveAt(_list.Length - 1);
             return item;
         }
-        public T Peek() => _list[_list.Length - 1];
+
+        public T Peek() => _list[^1];
         public int Count => _list.Length;
         public void Dispose() => _list.Dispose();
-
-        private NativeList<T> _list;
     }
 
     public class MapGenerator : MonoBehaviour
     {
+        public readonly Dictionary<int, (GameObject start, GameObject end)> StagePoints = new();
+        
+        private readonly Dictionary<string, Transform> _prefabParents = new();
+        private readonly List<GameObject> _spawnedObjects = new();
+        
         [Header("Maze Settings")]
-        public int width = 20;
-        public int height = 20;
-        public float cellSize = 2f;
-        public int randomSeed = 0;
-        public int totalStages = 3;
+        [SerializeField] private int width = 20;
+        [SerializeField] private int height = 20;
+        [SerializeField] private int randomSeed = 0;
+        [SerializeField] private int totalStages = 3;
+        [SerializeField] private float cellSize = 2f;
 
         [Header("Prefabs")]
-        public GameObject floorPrefab;
-        public GameObject wallPrefab;
-        public GameObject winPrefab;
-        public GameObject linePrefab;
-        public GameObject brickPrefab;
-        public GameObject winPosPrefab;
-        public GameObject unbrick;
+        [SerializeField] private GameObject floorPrefab;
+        [SerializeField] private GameObject wallPrefab;
+        [SerializeField] private GameObject winPrefab;
+        [SerializeField] private GameObject linePrefab;
+        [SerializeField] private GameObject brickPrefab;
+        [SerializeField] private GameObject winPosPrefab;
+        [SerializeField] private GameObject unbrick;
 
         [Header("Settings")]
         [SerializeField] private float winPrefabHeight;
         [SerializeField] private float runwayHeight;
 
-        public int BrickNeedToPass { get; set; }
-        private NativeArray<int> maze;
-        private List<GameObject> spawnedObjects = new List<GameObject>();
-        private Dictionary<string, Transform> prefabParents = new();
+        private NativeArray<int> _maze;
+        
+        public static int BrickNeedToPass { get; private set; }
 
         [ContextMenu("Generate All Stages")]
         public void GenerateFromInspector() => GenerateAllStages();
@@ -66,12 +69,12 @@ namespace MakeStack.Map
         [ContextMenu("Clear Map")]
         public void ClearFromInspector() => ClearMap();
 
-        void Start()
+        private void Start()
         {
             GenerateAllStages();
         }
 
-        public void GenerateAllStages()
+        private void GenerateAllStages()
         {
             ClearMap();
             
@@ -83,91 +86,81 @@ namespace MakeStack.Map
             PoolManager.Instance.CreatePool(winPosPrefab, 1, 5);
             PoolManager.Instance.CreatePool(unbrick, 20, 100);
 
-            Vector3 offset = Vector3.zero;
+            var offset = Vector3.zero;
 
-            for (int stage = 1; stage <= totalStages; stage++)
+            for (var stage = 1; stage <= totalStages; stage++)
             {
-                GenerateStage(stage, offset, out int blocksInStage, out GameObject endObjBorder, out GameObject startObjBorder);
+                GenerateStage(stage, offset, out int blocksInStage, out GameObject endObj, out GameObject startObj);
                 
-                // tag start / end
-                if (startObjBorder != null) startObjBorder.tag = "StartPoint";
-                if (endObjBorder != null) endObjBorder.tag = "EndPoint";
-
-                // place fence immediately after stage
-                float fenceZ = offset.z + height * cellSize;
+                if (startObj != null) startObj.tag = "StartPoint";
+                if (endObj != null) endObj.tag = "EndPoint";
+                
+                StagePoints[stage] = (startObj, endObj);
+                
+                var fenceZ = offset.z + height * cellSize;
+                
                 GenerateFence(new Vector3(offset.x, offset.y, fenceZ));
-
-                // next stage starts right after fence (fence occupies 1 row)
+                
                 if (stage < totalStages)
                 {
                     offset.z = fenceZ + cellSize;
                 }
                 else
                 {
-                    // stage cuối: runway begins right after fence
-                    float runwayStartZ = fenceZ + cellSize;
-                    GenerateRunwayAtPosition(runwayStartZ, endObjBorder, blocksInStage);
+                    var runwayStartZ = fenceZ + cellSize;
+                    GenerateRunwayAtPosition(runwayStartZ, endObj, 35);
                 }
                 
-                BrickNeedToPass = (int)Math.Round(blocksInStage * 0.4);
-
-                Debug.Log($"[Stage {stage}] Generated with {blocksInStage} floor blocks");
+                BrickNeedToPass = (int)Math.Round(blocksInStage * 0.3);
             }
         }
-
-        /// <summary>
-        /// Generate một stage ở vị trí offset (origin), trả về:
-        /// blockCount, endObjBorder (topmost cell object), startObjBorder (bottommost cell object).
-        /// Start đặt ở hàng 0, End đặt ở hàng height-1.
-        /// </summary>
-        private void GenerateStage(int stageIndex, Vector3 offset, out int blockCount, out GameObject endObjBorder, out GameObject startObjBorder)
+        
+        private void GenerateStage(int stageIndex, Vector3 offset, out int blockCount, out GameObject endObj, out GameObject startObj)
         {
             blockCount = 0;
-            endObjBorder = null;
-            startObjBorder = null;
+            endObj = null;
+            startObj = null;
 
-            uint seed = (randomSeed == 0) ? (uint)UnityEngine.Random.Range(1, int.MaxValue) 
-                                          : (uint)(randomSeed + stageIndex * 100);
+            var seed = (randomSeed == 0) 
+                ? (uint)UnityEngine.Random.Range(1, int.MaxValue) 
+                : (uint)(randomSeed + stageIndex * 100);
 
-            maze = new NativeArray<int>(width * height, Allocator.TempJob);
+            _maze = new NativeArray<int>(width * height, Allocator.TempJob);
 
-            int midX = (width % 2 == 0) ? width / 2 - 1 : width / 2;
-            int startY = (stageIndex == 1) ? 1 : 0;
-            int2 startPos = new int2(midX, startY);
-            int2 desiredEnd = new int2(midX, height - 1);
+            var midX = (width % 2 == 0) ? width / 2 - 1 : width / 2;
+            var startY = (stageIndex == 1) ? 1 : 0;
+            var startPos = new int2(midX, startY);
+            var desiredEnd = new int2(midX, height - 1);
 
             var job = new DFSMazeJob
             {
                 width = width,
                 height = height,
-                maze = maze,
+                maze = _maze,
                 startPos = startPos,
-                endPos = new int2(midX, Mathf.Clamp(height - 2, 0, height - 1)),
+                endPos = new int2(midX, height - 1),
                 seed = seed
             };
 
-            JobHandle handle = job.Schedule();
+            var handle = job.Schedule();
             handle.Complete();
-
-            // Đảm bảo top mở
-            int topIndex = (height - 1) * width + midX;
-            if (topIndex >= 0 && topIndex < maze.Length)
-                maze[topIndex] = 1;
-
-            // Đảm bảo start mở
-            int startIndex = startY * width + midX;
-            if (startIndex >= 0 && startIndex < maze.Length)
-                maze[startIndex] = 1;
-
-            // Spawn cell
-            for (int y = 0; y < height; y++)
+            
+            var topIndex = (height - 1) * width + midX;
+            
+            if (topIndex >= 0 && topIndex < _maze.Length) _maze[topIndex] = 1;
+            
+            var startIndex = startY * width + midX;
+            
+            if (startIndex >= 0 && startIndex < _maze.Length) _maze[startIndex] = 1;
+            
+            for (var y = 0; y < height; y++)
             {
-                for (int x = 0; x < width; x++)
+                for (var x = 0; x < width; x++)
                 {
-                    Vector3 pos = offset + new Vector3(x * cellSize, 0, y * cellSize);
-                    GameObject obj = null;
+                    var pos = offset + new Vector3(x * cellSize, 0, y * cellSize);
+                    GameObject obj;
 
-                    if (maze[y * width + x] == 1)
+                    if (_maze[y * width + x] == 1)
                     {
                         obj = SpawnFromPool(floorPrefab, pos, Quaternion.identity);
                         blockCount++;
@@ -177,26 +170,26 @@ namespace MakeStack.Map
                         obj = SpawnFromPool(wallPrefab, pos + Vector3.up * 0.1f, Quaternion.identity);
                     }
 
-                    if (x == midX && y == height - 1 && obj != null) endObjBorder = obj;
-                    if (x == midX && y == startY && obj != null) startObjBorder = obj;
+                    if (x == midX && y == height - 1 && obj != null) endObj = obj;
+                    if (x == midX && y == startY && obj != null) startObj = obj;
                 }
             }
 
-            maze.Dispose();
+            _maze.Dispose();
         }
-
 
         private void GenerateFence(Vector3 offset)
         {
-            int fenceWidth = width + 2;
+            var fenceWidth = width + 2;
 
-            for (int i = 0; i < fenceWidth; i++)
+            for (var i = 0; i < fenceWidth; i++)
             {
-                Vector3 pos = offset + new Vector3((i - 1) * cellSize, 0, 0);
-                GameObject obj = null;
+                var pos = offset + new Vector3((i - 1) * cellSize, 0, 0);
+                GameObject obj;
+
                 if (i == 0 || i == fenceWidth - 1)
                 {
-                    Vector3 posHigh = pos + Vector3.up * winPrefabHeight;
+                    var posHigh = pos + Vector3.up * winPrefabHeight;
                     obj = SpawnFromPool(winPrefab, posHigh, Quaternion.identity);
                 }
                 else
@@ -206,72 +199,68 @@ namespace MakeStack.Map
             }
         }
         
-        /// <summary>
-        /// Runway starts at given Z (world), centered at X of endObjBorder.
-        /// </summary>
-        private void GenerateRunwayAtPosition(float runwayStartZ, GameObject endObjBorder, int length)
+        private void GenerateRunwayAtPosition(float runwayStartZ, GameObject endObj, int length)
         {
-            if (endObjBorder == null)
-            {
-                Debug.LogWarning("[MapGenerator] endObjBorder is null, cannot center runway. Aborting runway.");
-                return;
-            }
+            if (endObj == null) return;
 
-            float centerX = endObjBorder.transform.position.x;
+            var centerX = endObj.transform.position.x;
 
-            for (int i = 0; i < length; i++)
+            for (var i = 0; i < length; i++)
             {
-                Vector3 pos = new Vector3(centerX, runwayHeight, runwayStartZ + i * cellSize);
+                var pos = new Vector3(centerX, runwayHeight, runwayStartZ + i * cellSize);
                 SpawnFromPool(linePrefab, pos, Quaternion.Euler(-90, 0, 0));
-                SpawnFromPool(brickPrefab, pos + Vector3.up * 0.1f, Quaternion.identity);
+                SpawnFromPool(brickPrefab, pos + Vector3.up * 0.1f, Quaternion.Euler(-90, 0, 0));
             }
 
-            Vector3 winPos = new Vector3(centerX, runwayHeight, runwayStartZ + length * cellSize);
+            var winPos = new Vector3(centerX, runwayHeight - 2.5f, runwayStartZ + length * cellSize);
             SpawnFromPool(winPosPrefab, winPos, Quaternion.identity);
         }
 
         private GameObject SpawnFromPool(GameObject prefab, Vector3 pos, Quaternion rot)
         {
-            GameObject obj = PoolManager.Instance.GetObject(prefab, pos, rot);
+            var obj = PoolManager.Instance.GetObject(prefab, pos, rot);
+            
             if (obj != null)
             {
                 obj.transform.SetParent(GetParentForPrefab(prefab));
-                spawnedObjects.Add(obj);
+                _spawnedObjects.Add(obj);
             }
             return obj;
         }
 
         private Transform GetParentForPrefab(GameObject prefab)
         {
-            string key = prefab.name;
-            if (!prefabParents.ContainsKey(key))
+            var key = prefab.name;
+            
+            if (!_prefabParents.ContainsKey(key))
             {
-                GameObject parentObj = new GameObject(key + "_Container");
-                prefabParents[key] = parentObj.transform;
+                var parentObj = new GameObject(key + "_Container");
+                _prefabParents[key] = parentObj.transform;
             }
-            return prefabParents[key];
+            return _prefabParents[key];
         }
 
-        public void ClearMap()
+        private void ClearMap()
         {
-            foreach (var obj in spawnedObjects)
+            foreach (var obj in _spawnedObjects)
             {
-                if (obj != null)
-                    PoolManager.Instance.ReturnObject(obj);
+                if (obj != null) PoolManager.Instance.ReturnObject(obj);
             }
-            spawnedObjects.Clear();
+            _spawnedObjects.Clear();
             
-            foreach (var kvp in prefabParents)
+            foreach (var kvp in _prefabParents)
             {
                 if (kvp.Value != null)
                 {
-                    for (int i = kvp.Value.childCount - 1; i >= 0; i--)
+                    for (var i = kvp.Value.childCount - 1; i >= 0; i--)
                     {
                         var child = kvp.Value.GetChild(i).gameObject;
                         PoolManager.Instance.ReturnObject(child);
                     }
                 }
             }
+            
+            StagePoints.Clear();
         }
 
         [BurstCompile]
@@ -286,61 +275,80 @@ namespace MakeStack.Map
 
             public void Execute()
             {
-                for (int i = 0; i < maze.Length; i++) maze[i] = 0;
+                for (var i = 0; i < maze.Length; i++) maze[i] = 0;
 
-                NativeStack<int2> stack = new NativeStack<int2>(Allocator.Temp);
-                stack.Push(startPos);
-                maze[startPos.y * width + startPos.x] = 1;
+                var rng = new Unity.Mathematics.Random(seed);
+                var current = startPos;
+                maze[current.y * width + current.x] = 1;
 
-                Unity.Mathematics.Random rng = new Unity.Mathematics.Random(seed);
-
-                // allow carving to edges by checking >=0 and <width/height
-                while (stack.Count > 0)
+                var firstUp = new int2(current.x, current.y + 1);
+                if (firstUp.y >= 2 && firstUp.y < height - 1)
                 {
-                    bool carved = false;
-                    int2 current = stack.Peek();
+                    maze[firstUp.y * width + firstUp.x] = 1;
+                    current = firstUp;
+                }
 
-                    int2[] dirs = new int2[]
+                while (current.y < height - 2)
+                {
+                    var dirs = new int2[]
                     {
-                        new int2(0, 2),
-                        new int2(2, 0),
-                        new int2(0, -2),
-                        new int2(-2, 0)
+                        new int2(0, 1),
+                        new int2(1, 0),
+                        new int2(-1, 0),
                     };
 
-                    // shuffle
-                    for (int i = 0; i < dirs.Length; i++)
+                    for (var i = 0; i < dirs.Length; i++)
                     {
-                        int swap = rng.NextInt(0, dirs.Length);
+                        var swap = rng.NextInt(0, dirs.Length);
                         (dirs[i], dirs[swap]) = (dirs[swap], dirs[i]);
                     }
 
+                    var moved = false;
+                    
                     foreach (var dir in dirs)
                     {
-                        int2 next = current + dir;
-
-                        if (next.x >= 0 && next.y >= 0 &&
-                            next.x < width && next.y < height)
+                        var next = current + dir;
+                        if (next.x >= 0 && next.x < width &&
+                            next.y >= 2 && next.y < height - 1)
                         {
                             if (maze[next.y * width + next.x] == 0)
                             {
-                                int2 wall = current + dir / 2;
-                                // guard wall index
-                                if (wall.x >= 0 && wall.y >= 0 && wall.x < width && wall.y < height)
-                                    maze[wall.y * width + wall.x] = 1;
-
                                 maze[next.y * width + next.x] = 1;
-                                stack.Push(next);
-                                carved = true;
+                                current = next;
+                                moved = true;
                                 break;
                             }
                         }
                     }
 
-                    if (!carved) stack.Pop();
+                    if (!moved)
+                    {
+                        int newY = current.y + 1;
+                        if (newY >= height - 1) break;
+                        current = new int2(current.x, newY);
+                        maze[current.y * width + current.x] = 1;
+                    }
                 }
 
-                stack.Dispose();
+                var connectorY = height - 2;
+                
+                if (current.y < connectorY)
+                {
+                    for (var y = current.y + 1; y <= connectorY; y++)
+                        maze[y * width + current.x] = 1;
+                    current = new int2(current.x, connectorY);
+                }
+
+                var x0 = math.min(current.x, endPos.x);
+                var x1 = math.max(current.x, endPos.x);
+                
+                for (var x = x0; x <= x1; x++)
+                    maze[connectorY * width + x] = 1;
+
+                for (var x = 0; x < width; x++)
+                    maze[(height - 1) * width + x] = 0;
+
+                maze[endPos.y * width + endPos.x] = 1;
             }
         }
     }

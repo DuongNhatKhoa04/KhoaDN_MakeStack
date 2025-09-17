@@ -27,10 +27,7 @@ namespace MakeStack.Manager
 
         private Dictionary<GameObject, Pool> _pools = new();
         private Dictionary<int, Pool> _idToPool = new();
-
-        /// <summary>
-        /// Tạo pool cho prefab với số lượng khởi tạo và giới hạn tối đa.
-        /// </summary>
+        
         public void CreatePool(GameObject prefab, int initialSize, int maxSize)
         {
             if (prefab == null) return;
@@ -62,10 +59,7 @@ namespace MakeStack.Manager
             if (enableDebugLog)
                 Debug.Log($"[PoolManager] Created pool for {prefab.name}, size {initialSize}/{maxSize}");
         }
-
-        /// <summary>
-        /// Lấy object từ pool. Nếu hết object sẽ Instantiate thêm cho đến khi đạt maxSize.
-        /// </summary>
+        
         public GameObject GetObject(GameObject prefab, Vector3 pos, Quaternion rot)
         {
             if (prefab == null) return null;
@@ -100,10 +94,7 @@ namespace MakeStack.Manager
 
             return obj;
         }
-
-        /// <summary>
-        /// Trả object về pool (inactive). Nếu không tìm thấy pool thì Destroy.
-        /// </summary>
+        
         public void ReturnObject(GameObject obj)
         {
             if (obj == null) return;

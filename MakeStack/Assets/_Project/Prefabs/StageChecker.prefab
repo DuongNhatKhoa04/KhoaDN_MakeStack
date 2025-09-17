@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 8494914453180188334}
   m_Layer: 3
   m_Name: StageChecker
-  m_TagString: Untagged
+  m_TagString: StageCheck
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -66,3 +66,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 651c127668bd6414eaf216ec9d747867, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  mapGenerator: {fileID: 0}
+  playerTransform: {fileID: 0}
+  collectBrick: {fileID: 0}
