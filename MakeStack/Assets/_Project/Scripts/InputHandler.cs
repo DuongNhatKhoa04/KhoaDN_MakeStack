@@ -9,8 +9,6 @@ namespace MakeStack.Input
 {
     public class InputHandler : MonoBehaviour
     {
-        #region --- Fields ---
-        
         [SerializeField] private Transform[] startPoints;
         [SerializeField] private Transform[] endPoints;
         [SerializeField] private GameObject[] stages;
@@ -25,6 +23,7 @@ namespace MakeStack.Input
         [SerializeField] private Rigidbody baseRigidbody;
         [SerializeField] private CollectBrick brickCollector;
         [SerializeField] private TextMeshProUGUI introText;
+        [SerializeField] private MeshRenderer brickMeshRenderer;
 
         private PlayerInput _playerInput;
         
@@ -39,10 +38,6 @@ namespace MakeStack.Input
         private bool _isScoring;
 
         private int _currentStage = 0;
-
-        #endregion
-
-        #region --- Properties ---
         
         private Transform Transform
         {
@@ -59,13 +54,9 @@ namespace MakeStack.Input
             get => Transform.localPosition;
             set => Transform.localPosition = value;
         }
-
-        public bool LevelPass { get; set; }
+        
         public bool StagesPass { get; set; }
         
-        #endregion
-
-        #region --- Methods ---
         
         private void Awake()
         {
@@ -120,7 +111,7 @@ namespace MakeStack.Input
             
             if (_isScoring && CollectBrick.TotalBricksCollected == 0)
             {
-                Debug.Log("Sliding");
+                //Debug.Log("Sliding");
                 _isSliding = false;
                 _isScoring = false;
                 return;
@@ -132,6 +123,11 @@ namespace MakeStack.Input
             if (Vector3.Distance(baseRigidbody.position, _targetPos) >= 0.1f) return;
             
             baseRigidbody.MovePosition(_targetPos);
+            _isSliding = false;
+        }
+        
+        public void StopSliding()
+        {
             _isSliding = false;
         }
 
@@ -171,7 +167,6 @@ namespace MakeStack.Input
                     _targetPos = startPoints[nextStage].position;
                     _isSliding = true;
                     _currentStage = nextStage;
-                    Debug.Log("next "+ nextStage);
                 }
                 else
                 {
@@ -180,7 +175,6 @@ namespace MakeStack.Input
             }
             else if (_currentStage == 2 && IsFinalStagePoint())
             {
-                Debug.Log("Final");
                 stages[_currentStage].layer = 0;
                 _targetPos = transform.position + _moveDir * maxSlideDistance;
                 _isSliding = true;
@@ -198,13 +192,11 @@ namespace MakeStack.Input
 
             if (Physics.Raycast(origin, dir, out RaycastHit hit, maxSlideDistance, wallLayerMask))
             {
-                //Debug.Log("Can");
                 var distance = hit.distance - 0.5f;
                 _targetPos = transform.position + dir * distance;
             }
             else
             {
-                //Debug.Log("Cant");
                 _targetPos = transform.position + dir * maxSlideDistance;
             }
 
@@ -223,6 +215,32 @@ namespace MakeStack.Input
             return Vector3.Distance(endPointRTarget.position, LocalPosition) < 0.1f;
         }
         
-        #endregion
+        public void ResetState()
+        {
+            _isSliding = false;
+            _isScoring = false;
+            _isSwipe = false;
+            _moveDir = Vector3.zero;
+            _targetPos = transform.position;
+            _startPos = Vector2.zero;
+            _endPos = Vector2.zero;
+
+            brickCollector.enabled = false;
+            
+            _currentStage = 0;
+            
+            if (baseRigidbody != null)
+            {
+                baseRigidbody.velocity = Vector3.zero;
+                baseRigidbody.angularVelocity = Vector3.zero;
+            }
+            
+            if (introText != null) introText.enabled = true;
+
+            for (var i = 0; i <= 2; i++)
+            {
+                stages[i].layer = 3;
+            }
+        }
     }
 }

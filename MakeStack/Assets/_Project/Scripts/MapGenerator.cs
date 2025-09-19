@@ -12,7 +12,7 @@ namespace MakeStack.Map
     public struct NativeStack<T> where T : unmanaged
     {
         private NativeList<T> _list;
-        
+
         public NativeStack(Allocator allocator)
         {
             _list = new NativeList<T>(allocator);
@@ -22,7 +22,7 @@ namespace MakeStack.Map
 
         public T Pop()
         {
-            var item = _list[^1]; // _list.Length - 1
+            var item = _list[^1];
             _list.RemoveAt(_list.Length - 1);
             return item;
         }
@@ -35,10 +35,10 @@ namespace MakeStack.Map
     public class MapGenerator : MonoBehaviour
     {
         public readonly Dictionary<int, (GameObject start, GameObject end)> StagePoints = new();
-        
+
         private readonly Dictionary<string, Transform> _prefabParents = new();
         private readonly List<GameObject> _spawnedObjects = new();
-        
+
         [Header("Maze Settings")]
         [SerializeField] private int width = 20;
         [SerializeField] private int height = 20;
@@ -60,7 +60,7 @@ namespace MakeStack.Map
         [SerializeField] private float runwayHeight;
 
         private NativeArray<int> _maze;
-        
+
         public static int BrickNeedToPass { get; private set; }
 
         [ContextMenu("Generate All Stages")]
@@ -74,33 +74,25 @@ namespace MakeStack.Map
             GenerateAllStages();
         }
 
-        private void GenerateAllStages()
+        public void GenerateAllStages()
         {
             ClearMap();
-            
-            PoolManager.Instance.CreatePool(floorPrefab, 50, 500);
-            PoolManager.Instance.CreatePool(wallPrefab, 50, 500);
-            PoolManager.Instance.CreatePool(winPrefab, 10, 50);
-            PoolManager.Instance.CreatePool(linePrefab, 20, 100);
-            PoolManager.Instance.CreatePool(brickPrefab, 50, 500);
-            PoolManager.Instance.CreatePool(winPosPrefab, 1, 5);
-            PoolManager.Instance.CreatePool(unbrick, 20, 100);
 
             var offset = Vector3.zero;
 
             for (var stage = 1; stage <= totalStages; stage++)
             {
                 GenerateStage(stage, offset, out int blocksInStage, out GameObject endObj, out GameObject startObj);
-                
+
                 if (startObj != null) startObj.tag = "StartPoint";
                 if (endObj != null) endObj.tag = "EndPoint";
-                
+
                 StagePoints[stage] = (startObj, endObj);
-                
+
                 var fenceZ = offset.z + height * cellSize;
-                
+
                 GenerateFence(new Vector3(offset.x, offset.y, fenceZ));
-                
+
                 if (stage < totalStages)
                 {
                     offset.z = fenceZ + cellSize;
@@ -110,19 +102,19 @@ namespace MakeStack.Map
                     var runwayStartZ = fenceZ + cellSize;
                     GenerateRunwayAtPosition(runwayStartZ, endObj, 35);
                 }
-                
+
                 BrickNeedToPass = (int)Math.Round(blocksInStage * 0.3);
             }
         }
-        
+
         private void GenerateStage(int stageIndex, Vector3 offset, out int blockCount, out GameObject endObj, out GameObject startObj)
         {
             blockCount = 0;
             endObj = null;
             startObj = null;
 
-            var seed = (randomSeed == 0) 
-                ? (uint)UnityEngine.Random.Range(1, int.MaxValue) 
+            var seed = (randomSeed == 0)
+                ? (uint)UnityEngine.Random.Range(1, int.MaxValue)
                 : (uint)(randomSeed + stageIndex * 100);
 
             _maze = new NativeArray<int>(width * height, Allocator.TempJob);
@@ -138,21 +130,19 @@ namespace MakeStack.Map
                 height = height,
                 maze = _maze,
                 startPos = startPos,
-                endPos = new int2(midX, height - 1),
+                endPos = desiredEnd,
                 seed = seed
             };
 
             var handle = job.Schedule();
             handle.Complete();
-            
+
             var topIndex = (height - 1) * width + midX;
-            
             if (topIndex >= 0 && topIndex < _maze.Length) _maze[topIndex] = 1;
-            
+
             var startIndex = startY * width + midX;
-            
             if (startIndex >= 0 && startIndex < _maze.Length) _maze[startIndex] = 1;
-            
+
             for (var y = 0; y < height; y++)
             {
                 for (var x = 0; x < width; x++)
@@ -162,12 +152,12 @@ namespace MakeStack.Map
 
                     if (_maze[y * width + x] == 1)
                     {
-                        obj = SpawnFromPool(floorPrefab, pos, Quaternion.identity);
+                        obj = InstantiateAndTrack(floorPrefab, pos, Quaternion.identity);
                         blockCount++;
                     }
                     else
                     {
-                        obj = SpawnFromPool(wallPrefab, pos + Vector3.up * 0.1f, Quaternion.identity);
+                        obj = InstantiateAndTrack(wallPrefab, pos + Vector3.up * 0.1f, Quaternion.identity);
                     }
 
                     if (x == midX && y == height - 1 && obj != null) endObj = obj;
@@ -190,15 +180,15 @@ namespace MakeStack.Map
                 if (i == 0 || i == fenceWidth - 1)
                 {
                     var posHigh = pos + Vector3.up * winPrefabHeight;
-                    obj = SpawnFromPool(winPrefab, posHigh, Quaternion.identity);
+                    obj = InstantiateAndTrack(winPrefab, posHigh, Quaternion.identity);
                 }
                 else
                 {
-                    obj = SpawnFromPool(unbrick, pos, Quaternion.Euler(-90, 0, 0));
+                    obj = InstantiateAndTrack(unbrick, pos, Quaternion.Euler(-90, 0, 0));
                 }
             }
         }
-        
+
         private void GenerateRunwayAtPosition(float runwayStartZ, GameObject endObj, int length)
         {
             if (endObj == null) return;
@@ -208,30 +198,26 @@ namespace MakeStack.Map
             for (var i = 0; i < length; i++)
             {
                 var pos = new Vector3(centerX, runwayHeight, runwayStartZ + i * cellSize);
-                SpawnFromPool(linePrefab, pos, Quaternion.Euler(-90, 0, 0));
-                SpawnFromPool(brickPrefab, pos + Vector3.up * 0.1f, Quaternion.Euler(-90, 0, 0));
+                InstantiateAndTrack(linePrefab, pos, Quaternion.Euler(-90, 0, 0));
+                InstantiateAndTrack(brickPrefab, pos + Vector3.up * 0.1f, Quaternion.Euler(-90, 0, 0));
             }
 
             var winPos = new Vector3(centerX, runwayHeight - 2.5f, runwayStartZ + length * cellSize);
-            SpawnFromPool(winPosPrefab, winPos, Quaternion.identity);
+            InstantiateAndTrack(winPosPrefab, winPos, Quaternion.identity);
         }
 
-        private GameObject SpawnFromPool(GameObject prefab, Vector3 pos, Quaternion rot)
+        private GameObject InstantiateAndTrack(GameObject prefab, Vector3 pos, Quaternion rot)
         {
-            var obj = PoolManager.Instance.GetObject(prefab, pos, rot);
-            
-            if (obj != null)
-            {
-                obj.transform.SetParent(GetParentForPrefab(prefab));
-                _spawnedObjects.Add(obj);
-            }
+            var obj = Instantiate(prefab, pos, rot);
+            obj.transform.SetParent(GetParentForPrefab(prefab));
+            _spawnedObjects.Add(obj);
             return obj;
         }
 
         private Transform GetParentForPrefab(GameObject prefab)
         {
             var key = prefab.name;
-            
+
             if (!_prefabParents.ContainsKey(key))
             {
                 var parentObj = new GameObject(key + "_Container");
@@ -240,26 +226,14 @@ namespace MakeStack.Map
             return _prefabParents[key];
         }
 
-        private void ClearMap()
+        public void ClearMap()
         {
             foreach (var obj in _spawnedObjects)
             {
-                if (obj != null) PoolManager.Instance.ReturnObject(obj);
+                if (obj != null) Destroy(obj);
             }
             _spawnedObjects.Clear();
-            
-            foreach (var kvp in _prefabParents)
-            {
-                if (kvp.Value != null)
-                {
-                    for (var i = kvp.Value.childCount - 1; i >= 0; i--)
-                    {
-                        var child = kvp.Value.GetChild(i).gameObject;
-                        PoolManager.Instance.ReturnObject(child);
-                    }
-                }
-            }
-            
+
             StagePoints.Clear();
         }
 
@@ -304,7 +278,7 @@ namespace MakeStack.Map
                     }
 
                     var moved = false;
-                    
+
                     foreach (var dir in dirs)
                     {
                         var next = current + dir;
@@ -331,7 +305,7 @@ namespace MakeStack.Map
                 }
 
                 var connectorY = height - 2;
-                
+
                 if (current.y < connectorY)
                 {
                     for (var y = current.y + 1; y <= connectorY; y++)
@@ -341,7 +315,7 @@ namespace MakeStack.Map
 
                 var x0 = math.min(current.x, endPos.x);
                 var x1 = math.max(current.x, endPos.x);
-                
+
                 for (var x = x0; x <= x1; x++)
                     maze[connectorY * width + x] = 1;
 

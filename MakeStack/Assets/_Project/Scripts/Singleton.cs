@@ -2,30 +2,38 @@
 
 namespace MakeStack.Ultilities
 {
-    /// <summary>
-    /// Singleton - Create Singleton Pattern. <br/>
-    /// Developer: Duong Nhat Khoa - Created on 2025/09/14.
-    /// </summary>
     public class Singleton<T> : MonoBehaviour where T : MonoBehaviour
     {
-        #region --- Methods ---
+        private static T _instance;
 
+        [SerializeField] protected bool dontDestroyOnLoad = true;
+        
+        public static T Instance
+        {
+            get
+            {
+                if (_instance != null) return _instance;
+
+                _instance = FindFirstObjectByType<T>();
+                
+                if (_instance != null) return _instance;
+
+                SetUpInstance();
+                
+                return _instance;
+            }
+        }
+        
         protected virtual void Awake()
         {
             RemoveDuplicates();
         }
-
-        /// <summary>
-        /// Guarantee that the instance is null when the object is destroyed.
-        /// </summary>
+        
         protected virtual void OnDestroy()
         {
             if (_instance == this) _instance = null;
         }
         
-        /// <summary>
-        /// Create a new instance of the singleton if it doesn't already exist.
-        /// </summary>
         private static void SetUpInstance()
         {
             if (_instance != null) return;
@@ -35,10 +43,7 @@ namespace MakeStack.Ultilities
 
             DontDestroyOnLoad(singleton);
         }
-
-        /// <summary>
-        /// Remove duplicate instances of the singleton.
-        /// </summary>
+        
         private void RemoveDuplicates()
         {
             if (_instance == null)
@@ -63,38 +68,5 @@ namespace MakeStack.Ultilities
                 Destroy(gameObject);
             }
         }
-
-        #endregion
-
-        #region --- Fields ---
-
-        private static T _instance;
-
-        [SerializeField] protected bool dontDestroyOnLoad = true;
-
-        #endregion
-
-        #region --- Properties ---
-
-        /// <summary>
-        /// Lazy initialization of the singleton instance.
-        /// </summary>
-        public static T Instance
-        {
-            get
-            {
-                if (_instance != null) return _instance;
-
-                _instance = FindFirstObjectByType<T>();
-                
-                if (_instance != null) return _instance;
-
-                SetUpInstance();
-                
-                return _instance;
-            }
-        }
-
-        #endregion
     }
 }

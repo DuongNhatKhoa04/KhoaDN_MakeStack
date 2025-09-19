@@ -1,4 +1,6 @@
 ﻿using System.Collections.Generic;
+using MakeStack.Manager;
+using TMPro;
 using UnityEngine;
 
 namespace MakeStack.Mechanic
@@ -7,8 +9,10 @@ namespace MakeStack.Mechanic
     {
         [SerializeField] private float objHeight = 0.45f;
         [SerializeField] private Transform baseTransform;
-        [SerializeField] private MeshRenderer brickMeshRenderer;
+        [SerializeField] private TextMeshProUGUI score;
 
+        public static List<Transform> StackedBricks = new();
+        
         private Vector3 _baseOriginPos;
         private int _stackCounter;
 
@@ -36,25 +40,33 @@ namespace MakeStack.Mechanic
                 
                 _stackCounter++;
                 TotalBricksCollected++;
+                score.text = (_stackCounter * 10).ToString();
+                StackedBricks.Add(stack);
             }
         }
-
-        private void OnTriggerExit(Collider other)
+        
+        public void PlaceOneBrick(Vector3 pos)
         {
-            /*if (!other.CompareTag("Runway")) return;*/
-            
-            if (other.CompareTag("Runway"))
+            if (_stackCounter <= 0 || StackedBricks.Count == 0)
             {
-                brickMeshRenderer.enabled = true;
-                TotalBricksCollected--;
-                
-                if (TotalBricksCollected > 0)
-                {
-                    var newPos = baseTransform.position;
-                    newPos.y -= objHeight;
-                    baseTransform.position = newPos;
-                }
+                LevelManager.Instance.OnRunwayFinished();
             }
+            
+            var brick = StackedBricks[^1];
+            StackedBricks.RemoveAt(StackedBricks.Count - 1);
+
+            if (brick != null)
+            {
+                brick.SetParent(null);
+                brick.position = pos + Vector3.up * 0.1f;
+            }
+
+            _stackCounter--;
+            TotalBricksCollected--;
+            
+            var newPos = baseTransform.position;
+            newPos.y -= objHeight;
+            baseTransform.position = newPos;
         }
         
         public static void ResetStack(CollectBrick collector)
@@ -83,6 +95,7 @@ namespace MakeStack.Mechanic
             
             TotalBricksCollected = 0;
             collector._stackCounter = 0;
+            StackedBricks.Clear();
         }
     }
 }

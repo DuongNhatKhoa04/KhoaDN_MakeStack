@@ -14,7 +14,6 @@ namespace MakeStack.Manager
         [SerializeField] private float baseDepthOffset;
         [SerializeField] private float extraDepthPerBrick;
         [SerializeField] private float maxExtraDepth;
-
         [SerializeField] private float smoothSpeed;
 
         void LateUpdate()

@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 33034472775896632}
   - component: {fileID: 23486336650771803}
   - component: {fileID: 7097185109849565851}
+  - component: {fileID: -2358468090925684068}
   m_Layer: 0
   m_Name: Brick
   m_TagString: Runway
@@ -49,7 +50,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1531101969777205}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -105,3 +106,15 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.0000005, y: 1.0000004, z: 0.29989854}
   m_Center: {x: 0.0000060945777, y: -0.00000027416934, z: 0.14994933}
+--- !u!114 &-2358468090925684068
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1531101969777205}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 268cc3fc9fc16b24c8ba22e61dd57bef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
